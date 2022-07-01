@@ -44,32 +44,43 @@ class HashtagVisualiser():
     def list_all_the_hashtags(self):
         print(self.__hashtags.keys())
 
-    def __draw_hashtag_timeline(self, temp_df: pd.DataFrame, magnitude_key: str, title: str, hashtag: str):
+    def get_top_5_hashtags(self) -> list:
+        sorted_hashtags = sorted(self.__hashtags, key=lambda hashtag: len(self.__hashtags[hashtag].get('index')),
+                                 reverse=True)
+        return sorted_hashtags[:5]
+
+    @staticmethod
+    def __draw_hashtag_timeline(temp_df: pd.DataFrame, magnitude_key: str, title: str, hashtag: str):
         unique_values = temp_df.groupby(magnitude_key).count().index.to_numpy()
         magnitude = temp_df.groupby(magnitude_key).count().iloc[:, 1].values
         # dates_to_plot = [i for i in temp_df]
-        levels = np.tile([-6, 6, -3, 3, -1, 1],
+        marker_size = np.array([n ** 3 if n < 10 else n ** 2 if n < 50 else n ** 1.4 for n in magnitude]).astype(float)
+
+        levels = np.tile([1, -1, 2, -2, 3, -3],
                          int(np.ceil(len(unique_values) / 6)))[:len(unique_values)]
 
-        marker_size = np.array([n ** 2 for n in magnitude]).astype(float)
+        # creating even spaced dots
+        x_axis = [x + 2 for x in range(0, len(unique_values))]
+
         fig, ax = plt.subplots(figsize=(25, 15))
         ax.set(title=title)
 
         # the date_test here is the place where the graph should be
         # 0 is the min
         # levels is the maximum here.
-        ax.vlines(unique_values, 0, levels, color="tab:red")
+        ax.vlines(x_axis, 0, levels, color="tab:red")
 
-        ax.plot(unique_values, np.zeros_like(unique_values))
-        ax.scatter(unique_values, np.zeros_like(unique_values), s=marker_size, edgecolors='k', c='lightgray')
+        ax.plot(x_axis, np.zeros_like(unique_values))
+        ax.scatter(x_axis, np.zeros_like(unique_values), s=marker_size, edgecolors='k', c='lightgray')
         plt.legend(['', '', 'Magnitude'])
 
-        for d, m, lev in zip(unique_values, magnitude, levels):
+        for d, m, lev in zip(x_axis, magnitude, levels):
             ax.annotate(f'{hashtag} ({m})', xy=(d, lev), xytext=(-3, np.sign(lev) * 6), textcoords="offset points",
                         horizontalalignment="center",
-                        verticalalignment="bottom" if lev > 0 else "top", wrap=True)
+                        verticalalignment="bottom" if lev > 0 else "top", wrap=True, fontsize=13)
 
-        ax.set_xticks(unique_values)
+        ax.set_xticks(x_axis)
+        ax.set_xticklabels(unique_values)
         plt.setp(ax.get_xticklabels(), rotation=90, ha="right")
         # ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
 
@@ -89,5 +100,14 @@ class HashtagVisualiser():
         distinct_number_of_months = temp_df['month'].nunique()
         distinct_number_of_days = temp_df['days'].nunique()
 
+        if distinct_number_of_years >= 5:
+            self.__draw_hashtag_timeline(temp_df, 'year', f'Usage of {hashtag} over different years', hashtag)
+            return
+
+        if distinct_number_of_months >= 5:
+            self.__draw_hashtag_timeline(temp_df, 'month', f'Usage of {hashtag} over different months', hashtag)
+            return
+
         if distinct_number_of_days >= 5:
             self.__draw_hashtag_timeline(temp_df, 'days', f'Usage of {hashtag} over different days', hashtag)
+            return
