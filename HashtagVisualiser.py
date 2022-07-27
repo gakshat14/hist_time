@@ -51,7 +51,9 @@ class HashtagVisualiser():
 
     @staticmethod
     def __draw_hashtag_timeline(temp_df: pd.DataFrame, magnitude_key: str, title: str, hashtag: str):
+
         unique_values = temp_df.groupby(magnitude_key).count().index.to_numpy()
+
         magnitude = temp_df.groupby(magnitude_key).count().iloc[:, 1].values
         # dates_to_plot = [i for i in temp_df]
         marker_size = np.array([n ** 3 if n < 10 else n ** 2 if n < 50 else n ** 1.4 for n in magnitude]).astype(float)
@@ -93,21 +95,21 @@ class HashtagVisualiser():
     def visualise_hashtag(self, hashtag: str):
         temp_df = self.__df.iloc[self.__hashtags[hashtag]['index']]
         temp_df['year'] = temp_df['date_time'].dt.year
-        temp_df['month'] = temp_df['date_time'].dt.month
-        temp_df['days'] = temp_df['date_time'].dt.day
-
+        temp_df['month_year'] = temp_df['date_time'].dt.to_period('M')
+        temp_df['date_only'] = temp_df['date_time'].dt.date
+        #
         distinct_number_of_years = temp_df['year'].nunique()
-        distinct_number_of_months = temp_df['month'].nunique()
-        distinct_number_of_days = temp_df['days'].nunique()
+        distinct_number_of_months = temp_df['month_year'].nunique()
+        distinct_number_of_days = temp_df['date_only'].nunique()
 
         if distinct_number_of_years >= 5:
             self.__draw_hashtag_timeline(temp_df, 'year', f'Usage of {hashtag} over different years', hashtag)
             return
 
         if distinct_number_of_months >= 5:
-            self.__draw_hashtag_timeline(temp_df, 'month', f'Usage of {hashtag} over different months', hashtag)
+            self.__draw_hashtag_timeline(temp_df, 'month_year', f'Usage of {hashtag} over different months', hashtag)
             return
 
         if distinct_number_of_days >= 5:
-            self.__draw_hashtag_timeline(temp_df, 'days', f'Usage of {hashtag} over different days', hashtag)
+            self.__draw_hashtag_timeline(temp_df, 'date_only', f'Usage of {hashtag} over different days', hashtag)
             return
