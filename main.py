@@ -20,6 +20,7 @@ args = parser.parse_args()
 if __name__ == '__main__':
     if args.application_to_run == 'wiki':
         wt = WikiTable(args.url, args.heading)
+        # next thing to do
     else:
         tw = HashtagVisualiser('data/tweets.csv', 'content', 'date_time')
         print(tw.get_top_5_hashtags())

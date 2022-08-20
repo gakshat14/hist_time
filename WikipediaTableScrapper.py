@@ -8,6 +8,7 @@ import spacy
 from bs4 import BeautifulSoup, Tag
 from yachalk import chalk
 
+from Timeline import TimelineVisualiser
 
 class WikiTable:
     MY_DATE_COLUMN = 'date'
@@ -28,8 +29,8 @@ class WikiTable:
         self.optional_columns = ['magnitude', 'location']
         self.df: pd.DataFrame = None
         self.nlp: spacy.Language = spacy.load('en_core_web_lg')
-        self.__fetch_my_table()
         self.__is_range = False
+        self.__fetch_my_table()
 
     def is_this_my_table(self, tag: Tag, tag_to_search_for='h2') -> bool:
         print(chalk.yellow_bright(f'Searching for {tag_to_search_for} in the table'))
@@ -74,10 +75,14 @@ class WikiTable:
             # column_mapping = self.required_columns + self.optional_columns
             # df = df.loc[:, column_mapping]
             self.df = df
-            # self.save_as_csv()
+            self.save_as_csv()
             # finally process the columns
             self.__process_my_columns()
             self.save_as_csv()
+            if self.__is_range:
+                TimelineVisualiser(self.df, self.table_title, 'Start Date', True).create_my_timeline()
+            else:
+                TimelineVisualiser(self.df, self.table_title, 'year').create_my_timeline()
 
         else:
             print(chalk.red('No table found'))
@@ -109,10 +114,9 @@ class WikiTable:
 
         # get all the dates
         df_null_dates = self.df[pd.isnull(self.df['Start Date'])]
-
-        self.print_delete_message_date(df_null_dates)
-
-        self.df = self.df.drop([index for index, value in df_null_dates.iterrows()])
+        if len(df_null_dates) > 0:
+            self.print_delete_message_date(df_null_dates)
+            self.df = self.df.drop([index for index, value in df_null_dates.iterrows()])
 
     def __process_date(self):
         self.df[self.MY_DATE_COLUMN] = self.df[self.MY_DATE_COLUMN].astype(str)
@@ -125,6 +129,7 @@ class WikiTable:
         if len(df_null_dates) > 0:
             self.print_delete_message_date(df_null_dates)
             self.df = self.df.drop(df_null_dates)
+        self.df['year'] = self.df[self.MY_DATE_COLUMN].dt.year
 
     def __process_magnitude(self):
         print(self.df.columns)
@@ -148,6 +153,7 @@ class WikiTable:
         # check if the date is a range column
         # process date column
         if self.__check_is_it_a_range():
+            self.__is_range = True
             self.__process_date_range()
         else:
             self.__process_date()
