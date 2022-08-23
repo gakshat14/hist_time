@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+plt.rcParams["figure.autolayout"] = True
+
 
 class TimelineVisualiser:
     MY_DATE_COLUMN = 'date'
@@ -40,8 +42,8 @@ class TimelineVisualiser:
         date = self.df[self.__timeline_key].tolist()
 
         # initialise the figure
-        fig, ax = plt.subplots(figsize=(35, 15))
-        ax.set(title=self.heading)
+        fig, ax = plt.subplots(figsize=(35, 8))
+        ax.set_title(self.heading, pad=80)
 
         # create vertical lines
         levels = np.tile([1, -1, 2, -2, 3, -3],
@@ -74,7 +76,7 @@ class TimelineVisualiser:
             ax.annotate(text, xy=(x_axis[index], levels[index]), xytext=(-3, np.sign(levels[index]) * 6),
                         textcoords="offset points",
                         horizontalalignment="center",
-                        verticalalignment="bottom" if levels[index] > 0 else "top", wrap=True)
+                        verticalalignment="bottom" if levels[index] > 0 else "top", wrap=True, fontsize=11)
 
         ax.set_xticks(x_axis)
         ax.set_xticklabels(date)
@@ -83,6 +85,6 @@ class TimelineVisualiser:
 
         ax.yaxis.set_visible(False)
         ax.spines[["left", "top", "right"]].set_visible(False)
-
-        ax.margins(y=0.1)
-        plt.savefig(self.heading, bbox_inches='tight',dpi=100)
+        plt.margins(y=0.2)
+        plt.subplots_adjust(bottom=0.12)
+        plt.savefig(self.heading,dpi=100)

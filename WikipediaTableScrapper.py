@@ -140,7 +140,7 @@ class WikiTable:
         magnitude_values = self.df[self.MY_MAGNITUDE_COLUMN].tolist()
         only_numeric = [re.findall(self.__numeric_regex, value) for value in magnitude_values]
         # sum if we have 2 values together
-        cleaned_magnitude_value = [sum(list((map(float, value)))) for value in only_numeric]
+        cleaned_magnitude_value = [np.mean(list((map(float, value)))) for value in only_numeric]
 
         self.df['magnitude_calc'] = cleaned_magnitude_value
 

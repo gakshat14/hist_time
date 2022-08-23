@@ -24,3 +24,4 @@ if __name__ == '__main__':
     else:
         tw = HashtagVisualiser('data/tweets.csv', 'content', 'date_time')
         print(tw.get_top_5_hashtags())
+        tw.generate_sentiment_time_series('#ActOnClimate')

@@ -1,26 +1,80 @@
-import pandas as pd
 import re
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import string
+import seaborn as sns
+from textblob import TextBlob
+from yachalk import chalk
+from scipy.signal import find_peaks
+
+from Timeline import TimelineVisualiser
 
 
 class HashtagVisualiser():
     def __init__(self, path_to_csv: str, tweet_key: str, date_time_key: str):
         print('Initializer called')
-        self.__df = pd.read_csv(path_to_csv)
-        self.__df[date_time_key] = pd.to_datetime(self.__df[date_time_key])
-        self.__df = self.__df.drop(columns=self.__df.columns.difference([tweet_key, date_time_key]))
+        self.df = pd.read_csv(path_to_csv)
         self.__date_time_key = date_time_key
         self.__tweets_key = tweet_key
-        self.__hashtags = self.__get_the_list_of_hashtags()
+        self.__hashtag_index = None
+        self.process_my_df()
 
     def print_my_dataframe(self):
         print('print dataframe called')
-        # if not self.__df:
+        # if not self.df:
         #     raise ValueError('The specified dataframe does not exists')
-        print(self.__df)
+        print(self.df)
 
-    def __get_the_list_of_hashtags(self):
+    @staticmethod
+    def __return_my_hashtag(series):
+        content, date_time = series
+        regex = r'#\w+'
+        results = re.findall(regex, content)
+        if len(results) > 0:
+            return results
+        return np.nan
+
+    def __generate_hashtags(self):
+        print(chalk.blue('Generating hashtag'))
+        self.df['hashtags'] = self.df.apply(self.__return_my_hashtag, axis=1)
+        self.df.dropna(axis=0, inplace=True)
+        self.df = self.df.explode('hashtags')
+
+    @staticmethod
+    def __generate_sentiments(tweet):
+        # remove all the RT
+        tweet = re.sub(r'^RT[\s]+', '', tweet)
+        # remove hash signs
+        tweet = re.sub(r'#', '', tweet)
+        # remove mentions
+        tweet = re.sub(r'@[A-Za-z0-9]+', '', tweet)
+        # remove links
+        tweet = re.sub(r'https?:\/\/.*[\r\n]*', '', tweet)
+        # remove punctuation
+        tweet = re.sub(r'[' + string.punctuation + ']+', ' ', tweet)
+
+        # finally get the sentiment score
+        blob = TextBlob(tweet)
+        return round(blob.sentiment.polarity, 2)
+
+    def __get_sentiments(self):
+        print(chalk.blue('Generating sentiment'))
+        self.df['sentiment'] = self.df[self.__tweets_key].apply(self.__generate_sentiments)
+
+    def process_my_df(self):
+        self.df[self.__date_time_key] = pd.to_datetime(self.df[self.__date_time_key])
+        self.df = self.df.drop(columns=self.df.columns.difference([self.__tweets_key, self.__date_time_key]))
+        print(chalk.blue('Processing date to generate year, month and date'))
+        self.__generate_hashtags()
+        self.__get_sentiments()
+        self.df['year'] = self.df[self.__date_time_key].dt.year
+        self.df['month_year'] = self.df[self.__date_time_key].dt.to_period('M')
+        self.df['date_only'] = self.df[self.__date_time_key].dt.date
+        self.__hashtag_index = self.__generate_hashtag_index()
+        self.df.drop(columns=self.__tweets_key, inplace=True)
+
+    def __generate_hashtag_index(self):
         print('generating list of hashtags')
         count = 0
         hashtags = dict()
@@ -30,7 +84,7 @@ class HashtagVisualiser():
             regex = r'#\w+'
             results = re.findall(regex, series)
             for result in results:
-                year = self.__df[self.__date_time_key][count].year
+                year = self.df.iloc[count].year
                 if result not in hashtags:
                     hashtags[result] = {'index': [count], 'year': [year]}
                 else:
@@ -38,78 +92,193 @@ class HashtagVisualiser():
                     hashtags[result]['year'].append(year)
             count += 1
 
-        self.__df[self.__tweets_key].map(get_hashtag)
+        self.df[self.__tweets_key].map(get_hashtag)
         return hashtags
 
     def list_all_the_hashtags(self):
-        print(self.__hashtags.keys())
+        print(self.df.hashtags.unique())
 
     def get_top_5_hashtags(self) -> list:
-        sorted_hashtags = sorted(self.__hashtags, key=lambda hashtag: len(self.__hashtags[hashtag].get('index')),
+        sorted_hashtags = sorted(self.__hashtag_index,
+                                 key=lambda hashtag: len(self.__hashtag_index[hashtag].get('index')),
                                  reverse=True)
         return sorted_hashtags[:5]
 
-    @staticmethod
-    def __draw_hashtag_timeline(temp_df: pd.DataFrame, magnitude_key: str, title: str, hashtag: str):
-
-        unique_values = temp_df.groupby(magnitude_key).count().index.to_numpy()
-
-        magnitude = temp_df.groupby(magnitude_key).count().iloc[:, 1].values
-        # dates_to_plot = [i for i in temp_df]
-        marker_size = np.array([n ** 3 if n < 10 else n ** 2 if n < 50 else n ** 1.4 for n in magnitude]).astype(float)
-
-        levels = np.tile([1, -1, 2, -2, 3, -3],
-                         int(np.ceil(len(unique_values) / 6)))[:len(unique_values)]
-
-        # creating even spaced dots
-        x_axis = [x + 2 for x in range(0, len(unique_values))]
-
-        fig, ax = plt.subplots(figsize=(25, 15))
-        ax.set(title=title)
-
-        # the date_test here is the place where the graph should be
-        # 0 is the min
-        # levels is the maximum here.
-        ax.vlines(x_axis, 0, levels, color="tab:red")
-
-        ax.plot(x_axis, np.zeros_like(unique_values))
-        ax.scatter(x_axis, np.zeros_like(unique_values), s=marker_size, edgecolors='k', c='lightgray')
-        plt.legend(['', '', 'Magnitude'])
-
-        for d, m, lev in zip(x_axis, magnitude, levels):
-            ax.annotate(f'{hashtag} ({m})', xy=(d, lev), xytext=(-3, np.sign(lev) * 6), textcoords="offset points",
-                        horizontalalignment="center",
-                        verticalalignment="bottom" if lev > 0 else "top", wrap=True, fontsize=13)
-
-        ax.set_xticks(x_axis)
-        ax.set_xticklabels(unique_values)
-        plt.setp(ax.get_xticklabels(), rotation=90, ha="right")
-        # ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-
-        ax.yaxis.set_visible(False)
-        ax.spines[["left", "top", "right"]].set_visible(False)
-
-        ax.margins(y=0.1)
+    def generate_sentiment_time_series(self, hashtag_to_plot):
+        # temp_df = self.df[self.df.hashtags == hashtag]
+        fig, ax = plt.subplots(figsize=(15, 8))
+        sns.lineplot(data=self.df[self.df.hashtags == hashtag_to_plot], x=self.__date_time_key, y='sentiment', ax=ax, ci=False)
+        # ax.plot(temp_df[self.__date_time_key], np.zeros_like(temp_df[self.__date_time_key]))
+        # ax.annotate('Neutral', xy=(1, 0.4), xytext=(1, 0.5))
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Sentiment Score')
         plt.show()
 
-    def visualise_hashtag(self, hashtag: str):
-        temp_df = self.__df.iloc[self.__hashtags[hashtag]['index']]
-        temp_df['year'] = temp_df['date_time'].dt.year
-        temp_df['month_year'] = temp_df['date_time'].dt.to_period('M')
-        temp_df['date_only'] = temp_df['date_time'].dt.date
-        #
-        distinct_number_of_years = temp_df['year'].nunique()
-        distinct_number_of_months = temp_df['month_year'].nunique()
-        distinct_number_of_days = temp_df['date_only'].nunique()
+    def generate_quantile_all(self):
+        print(chalk.blue('generating grouped hashtags'))
+        temp_df = self.df.copy()
+        df_grouped = temp_df.loc[:, ['year', 'hashtags']].groupby(by='year').value_counts().to_frame()
+        unique_year = temp_df.year.unique().tolist()
+        year_quantile = {}
+        for year in unique_year:
+            year_quantile[year] = np.quantile(df_grouped.loc[year].values, 0.99)
+        df_grouped.columns = ['count_value']
+        year_event = {'year': [], 'event': []}
+        for year in sorted(unique_year):
+            print(year)
+            temp_df = df_grouped.loc[year]
+            events = [f'{key}({value.count_value})' for key, value in
+                      temp_df[temp_df['count_value'] > year_quantile[year]][:10].iterrows()]
+            if len(events) > 0:
+                year_event['year'].append(year)
+                year_event['event'].append(', '.join(events))
 
-        if distinct_number_of_years >= 5:
-            self.__draw_hashtag_timeline(temp_df, 'year', f'Usage of {hashtag} over different years', hashtag)
-            return
+        df_final = pd.DataFrame.from_dict(year_event)
+        TimelineVisualiser(df_final, 'Usage of prominent hashtag over the years').create_my_timeline()
 
-        if distinct_number_of_months >= 5:
-            self.__draw_hashtag_timeline(temp_df, 'month_year', f'Usage of {hashtag} over different months', hashtag)
-            return
+    def generate_quantile_specific_month(self, month=5):
+        print(month)
+        print('generating grouped hashtags')
+        temp_df = self.df.copy()
+        temp_df['month'] = temp_df.month_year.dt.month
+        temp_df = temp_df[temp_df['month'] == month]
+        df_grouped = temp_df.loc[:, ['month_year', 'hashtags']].groupby(by='month_year').value_counts().to_frame()
+        unique_values = temp_df.month_year.unique().tolist()
+        value_quantile = {}
+        for value_month in unique_values:
+            value_quantile[value_month] = np.quantile(df_grouped.loc[value_month].values, 0.99)
+        df_grouped.columns = ['count_value']
+        print(value_quantile)
+        print(sorted(unique_values))
+        value_event = {'month': [], 'event': []}
+        for value in sorted(unique_values):
+            print(value)
+            temp_df = df_grouped.loc[value]
+            events = [f'{key}({value.count_value})' for key, value in
+                      temp_df[temp_df['count_value'] > value_quantile[value]][:10].iterrows()]
+            if len(events) > 0:
+                value_event['month'].append(value)
+                value_event['event'].append(', '.join(events))
+        df_final = pd.DataFrame.from_dict(value_event)
+        print(df_final)
+        TimelineVisualiser(df_final, f'Usage of prominent hashtag over month {5}',
+                           timeline_key='month').create_my_timeline()
 
-        if distinct_number_of_days >= 5:
-            self.__draw_hashtag_timeline(temp_df, 'date_only', f'Usage of {hashtag} over different days', hashtag)
-            return
+    def generate_quantile_specific_year(self, year=2015):
+        print(year)
+        print('generating grouped hashtags')
+        temp_df = self.df.copy()
+        temp_df['month'] = temp_df.month_year.dt.month
+        temp_df = temp_df[temp_df['year'] == year]
+        df_grouped = temp_df.loc[:, ['month', 'hashtags']].groupby(by='month').value_counts().to_frame()
+        unique_values = temp_df.month.unique().tolist()
+        value_quantile = {}
+        for value_month in unique_values:
+            value_quantile[value_month] = np.quantile(df_grouped.loc[value_month].values, 0.99)
+        df_grouped.columns = ['count_value']
+        print(value_quantile)
+        print(sorted(unique_values))
+        value_event = {'month': [], 'event': []}
+        for value in sorted(unique_values):
+            print(value)
+            temp_df = df_grouped.loc[value]
+            events = [f'{key}({value.count_value})' for key, value in
+                      temp_df[temp_df['count_value'] > value_quantile[value]][:10].iterrows()]
+            if len(events) > 0:
+                value_event['month'].append(value)
+                value_event['event'].append(', '.join(events))
+        df_final = pd.DataFrame.from_dict(value_event)
+        print(df_final)
+        TimelineVisualiser(df_final, f'Usage of prominent hashtag over year {year}',
+                           timeline_key='month').create_my_timeline()
+
+    def generate_peak_based_timeline_all(self):
+        temp_df = self.df.copy()
+        df_grouped_2 = temp_df.loc[:, ['year', 'hashtags']].groupby(by=['hashtags', 'year']).value_counts().to_frame()
+        df_grouped_2.columns = ['value_count']
+        all_hashtags = temp_df.hashtags.unique().tolist()
+        final_time_series_dict = {}
+        for hash in all_hashtags:
+            temp_df = df_grouped_2.loc[hash]
+            peaks = find_peaks(temp_df.value_count)
+            if len(peaks[0]) > 0:
+                for key, value in temp_df.iloc[list(peaks[0])].iterrows():
+                    if key not in final_time_series_dict:
+                        final_time_series_dict[key] = [f'{hash}({value.value_count})']
+                    else:
+                        final_time_series_dict[key].append(f'{hash}({value.value_count})')
+
+        final_df_dict = {'year': [], 'event': []}
+        for key, items in final_time_series_dict.items():
+            final_df_dict['year'].append(key)
+            final_df_dict['event'].append(', '.join(
+                sorted(items, key=lambda item: int(re.findall(r'[0-9]+', re.findall(r'\([0-9]+\)', item)[0])[0]),
+                       reverse=True)[:10]))
+
+        df_time_series = pd.DataFrame.from_dict(final_df_dict)
+        TimelineVisualiser(df_time_series, 'Anything time series').create_my_timeline()
+
+    def generate_peak_based_timeline_specific_month(self, month):
+        temp_df = self.df.copy()
+        temp_df['month'] = temp_df.month_year.dt.month
+        temp_df = temp_df[temp_df['month'] == month]
+        df_grouped_2 = temp_df.loc[:, ['month_year', 'hashtags']].groupby(by=['hashtags', 'month_year']).value_counts().to_frame()
+        df_grouped_2.columns = ['value_count']
+        all_hashtags = temp_df.hashtags.unique().tolist()
+        final_time_series_dict = {}
+        for hash in all_hashtags:
+            temp_df = df_grouped_2.loc[hash]
+            peaks = find_peaks(temp_df.value_count)
+            if len(peaks[0]) > 0:
+                for key, value in temp_df.iloc[list(peaks[0])].iterrows():
+                    if key not in final_time_series_dict:
+                        final_time_series_dict[key] = [f'{hash}({value.value_count})']
+                    else:
+                        final_time_series_dict[key].append(f'{hash}({value.value_count})')
+
+        final_df_dict = {'month': [], 'event': []}
+        for key, items in final_time_series_dict.items():
+            final_df_dict['month'].append(key)
+            final_df_dict['event'].append(', '.join(
+                sorted(items, key=lambda item: int(re.findall(r'[0-9]+', re.findall(r'\([0-9]+\)', item)[0])[0]),
+                       reverse=True)[:10]))
+
+        df_time_series = pd.DataFrame.from_dict(final_df_dict)
+        TimelineVisualiser(df_time_series, f'Peaks of hashtags over the month {month}', 'month').create_my_timeline()
+
+    def generate_peak_based_timeline_specific_year(self, year=2015):
+        temp_df = self.df.copy()
+        temp_df['month'] = temp_df.month_year.dt.month
+        temp_df = temp_df[temp_df['year'] == year]
+        df_grouped_2 = temp_df.loc[:, ['month', 'hashtags']].groupby(by=['hashtags', 'month']).value_counts().to_frame()
+        df_grouped_2.columns = ['value_count']
+        all_hashtags = temp_df.hashtags.unique().tolist()
+        final_time_series_dict = {}
+        for hash in all_hashtags:
+            temp_df = df_grouped_2.loc[hash]
+            peaks = find_peaks(temp_df.value_count)
+            if len(peaks[0]) > 0:
+                for key, value in temp_df.iloc[list(peaks[0])].iterrows():
+                    if key not in final_time_series_dict:
+                        final_time_series_dict[key] = [f'{hash}({value.value_count})']
+                    else:
+                        final_time_series_dict[key].append(f'{hash}({value.value_count})')
+        print()
+        final_df_dict = {'month': [], 'event': []}
+        for key in sorted(final_time_series_dict.keys()):
+            items = final_time_series_dict[key]
+            final_df_dict['month'].append(key)
+            final_df_dict['event'].append(', '.join(
+                sorted(items, key=lambda item: int(re.findall(r'[0-9]+', re.findall(r'\([0-9]+\)', item)[0])[0]),
+                       reverse=True)[:10]))
+
+        df_time_series = pd.DataFrame.from_dict(final_df_dict)
+        TimelineVisualiser(df_time_series, f'Peaks of hashtags over the year {year}', 'month').create_my_timeline()
+
+
+if __name__ == '__main__':
+    tw = HashtagVisualiser('data/tweets.csv', 'content', 'date_time')
+    tw.generate_quantile_specific_year(2015)
+    tw.generate_peak_based_timeline_all()
+    tw.generate_peak_based_timeline_specific_month(5)
+    tw.generate_peak_based_timeline_specific_year()
