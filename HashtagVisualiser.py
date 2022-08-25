@@ -7,9 +7,10 @@ import seaborn as sns
 from textblob import TextBlob
 from yachalk import chalk
 from scipy.signal import find_peaks
+import calendar
 
 from Timeline import TimelineVisualiser
-
+from Constants import ALL_COLORS
 
 class HashtagVisualiser():
     def __init__(self, path_to_csv: str, tweet_key: str, date_time_key: str):
@@ -18,6 +19,8 @@ class HashtagVisualiser():
         self.__date_time_key = date_time_key
         self.__tweets_key = tweet_key
         self.__hashtag_index = None
+        self.__hashtag_color_mapping = {}
+        self.__all_colors = ALL_COLORS
         self.process_my_df()
 
     def print_my_dataframe(self):
@@ -40,6 +43,19 @@ class HashtagVisualiser():
         self.df['hashtags'] = self.df.apply(self.__return_my_hashtag, axis=1)
         self.df.dropna(axis=0, inplace=True)
         self.df = self.df.explode('hashtags')
+
+    def color_my_hashcode(self, hashtag, count):
+        color = ''
+        if hashtag not in self.__hashtag_color_mapping:
+            color = self.__all_colors[0]
+            self.__hashtag_color_mapping[hashtag] = color
+            del self.__all_colors[0]
+            print(color)
+            print(chalk.hex(color)(f'{hashtag}({count})'))
+            return f"""{chalk.hex(color)(f'{hashtag}({count})')}"""
+        else:
+            print(chalk.hex(self.__hashtag_color_mapping[hashtag])(f'{hashtag}({count})'))
+            return f"""{chalk.hex(self.__hashtag_color_mapping[hashtag])(f'{hashtag}({count})')}"""
 
     @staticmethod
     def __generate_sentiments(tweet):
@@ -131,7 +147,7 @@ class HashtagVisualiser():
                       temp_df[temp_df['count_value'] > year_quantile[year]][:10].iterrows()]
             if len(events) > 0:
                 year_event['year'].append(year)
-                year_event['event'].append(', '.join(events))
+                year_event['event'].append(events)
 
         df_final = pd.DataFrame.from_dict(year_event)
         TimelineVisualiser(df_final, 'Usage of prominent hashtag over the years').create_my_timeline()
@@ -160,8 +176,7 @@ class HashtagVisualiser():
                 value_event['month'].append(value)
                 value_event['event'].append(', '.join(events))
         df_final = pd.DataFrame.from_dict(value_event)
-        print(df_final)
-        TimelineVisualiser(df_final, f'Usage of prominent hashtag over month {5}',
+        TimelineVisualiser(df_final, f'Usage of prominent hashtag over {calendar.month_name[month]}',
                            timeline_key='month').create_my_timeline()
 
     def generate_quantile_specific_year(self, year=2015):
@@ -188,7 +203,6 @@ class HashtagVisualiser():
                 value_event['month'].append(value)
                 value_event['event'].append(', '.join(events))
         df_final = pd.DataFrame.from_dict(value_event)
-        print(df_final)
         TimelineVisualiser(df_final, f'Usage of prominent hashtag over year {year}',
                            timeline_key='month').create_my_timeline()
 
@@ -275,10 +289,25 @@ class HashtagVisualiser():
         df_time_series = pd.DataFrame.from_dict(final_df_dict)
         TimelineVisualiser(df_time_series, f'Peaks of hashtags over the year {year}', 'month').create_my_timeline()
 
+    def generate_time_series_hashtag(self, hashtag_to_plot: str):
+        fig, ax = plt.subplots(figsize=(15, 8))
+        new_df = self.df.copy()
+        new_df = new_df[new_df['hashtags'] == hashtag_to_plot]
+        temp = new_df.groupby('year').count().reset_index().iloc[:, [0, 1]]
+        plt.plot(temp.iloc[:, 0], temp.iloc[:, 1])
+        ax.set_xticks(temp.iloc[:, 0])
+        ax.set_xlabel('Year')
+        ax.set_ylabel('Count')
+        ax.set_title(f'Usage of {hashtag_to_plot} over the years')
+        plt.show()
+
+    def get_sentiment_score(self):
+        pass
 
 if __name__ == '__main__':
     tw = HashtagVisualiser('data/tweets.csv', 'content', 'date_time')
-    tw.generate_quantile_specific_year(2015)
-    tw.generate_peak_based_timeline_all()
-    tw.generate_peak_based_timeline_specific_month(5)
-    tw.generate_peak_based_timeline_specific_year()
+    tw.generate_time_series_hashtag('#FallonTonight')
+    # tw.generate_quantile_specific_year(2015)
+    # tw.generate_peak_based_timeline_all()
+    # tw.generate_peak_based_timeline_specific_month(5)
+    # tw.generate_peak_based_timeline_specific_year()

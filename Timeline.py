@@ -72,11 +72,13 @@ class TimelineVisualiser:
             if len(magnitude) > 0:
                 text += f'({self.__short_my_string(magnitude_text[index])}) \n'
             # self.__short_my_string(text)
-
-            ax.annotate(text, xy=(x_axis[index], levels[index]), xytext=(-3, np.sign(levels[index]) * 6),
-                        textcoords="offset points",
-                        horizontalalignment="center",
-                        verticalalignment="bottom" if levels[index] > 0 else "top", wrap=True, fontsize=11)
+            ax.text(s=text, x=x_axis[index], y=levels[index],
+                    horizontalalignment="center",
+                    verticalalignment="bottom" if levels[index] > 0 else "top", wrap=True, fontsize=11)
+            # ax.annotate(text, xy=(x_axis[index], levels[index]), xytext=(-3, np.sign(levels[index]) * 6),
+            #             textcoords="offset points",
+            #             horizontalalignment="center",
+            #             verticalalignment="bottom" if levels[index] > 0 else "top", wrap=True, fontsize=11)
 
         ax.set_xticks(x_axis)
         ax.set_xticklabels(date)
@@ -87,4 +89,4 @@ class TimelineVisualiser:
         ax.spines[["left", "top", "right"]].set_visible(False)
         plt.margins(y=0.2)
         plt.subplots_adjust(bottom=0.12)
-        plt.savefig(self.heading,dpi=100)
+        plt.show()
