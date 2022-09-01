@@ -10,6 +10,7 @@ from yachalk import chalk
 
 from Timeline import TimelineVisualiser
 
+
 class WikiTable:
     MY_DATE_COLUMN = 'date'
     MY_EVENT_COLUMN = 'event'
@@ -22,6 +23,7 @@ class WikiTable:
         self.__only_char_regex = r'[a-zA-Z]+'
         self.__square_brackets_regex = r'\[.*?\]'
         self.__numeric_regex = r'\d+\.\d+'
+        self.__magnitude_key = ''
         self.table_title = ' '.join(re.findall(self.__only_char_regex, table_title, flags=re.IGNORECASE))
         self.__file_name = '_'.join(self.table_title.split(" "))
         self.__regex = re.compile(self.table_title, re.IGNORECASE)
@@ -67,22 +69,23 @@ class WikiTable:
         if table_to_parse:
             print(chalk.green(f'table found {self.__file_name}'))
             df = pd.read_html(str(table_to_parse))[0]
-            print(df.columns)
             # clean up column names
             df = df.set_axis(self.clean_my_column_name(df.columns.tolist()), axis=1)
+            print(chalk.magenta_bright(df.columns))
             self.df = df
             self.__get_column_mapping()
-            # column_mapping = self.required_columns + self.optional_columns
-            # df = df.loc[:, column_mapping]
             self.df = df
             self.save_as_csv()
             # finally process the columns
             self.__process_my_columns()
             self.save_as_csv()
             if self.__is_range:
-                TimelineVisualiser(self.df, self.table_title, 'Start Date', True).create_my_timeline()
+                TimelineVisualiser(self.df, self.table_title, 'Years', 'start_date_year',
+                                   magnitude_legend_key=self.__magnitude_key, is_range=True,
+                                   attribution_text=f'Taken from {self.url}').create_my_timeline()
             else:
-                TimelineVisualiser(self.df, self.table_title, 'year').create_my_timeline()
+                TimelineVisualiser(self.df, self.table_title, 'year', magnitude_legend_key=self.__magnitude_key,
+                                   attribution_text=f'Taken from {self.url}').create_my_timeline()
 
         else:
             print(chalk.red('No table found'))
@@ -108,15 +111,18 @@ class WikiTable:
     def __process_date_range(self):
         # split the date
         df_date_split = self.df[self.MY_DATE_COLUMN].str.split('–')
-
-        self.df['Start Date'] = pd.to_datetime([start[len(start) - 2] for start in df_date_split], errors='coerce')
-        self.df['End Date'] = pd.to_datetime([end[len(end) - 2] for end in df_date_split], errors='coerce')
+        # get the first index
+        self.df['Start Date'] = pd.to_datetime([start[0] for start in df_date_split], errors='coerce')
+        # get the last index
+        self.df['End Date'] = pd.to_datetime([end[-1] for end in df_date_split], errors='coerce')
 
         # get all the dates
         df_null_dates = self.df[pd.isnull(self.df['Start Date'])]
         if len(df_null_dates) > 0:
             self.print_delete_message_date(df_null_dates)
             self.df = self.df.drop([index for index, value in df_null_dates.iterrows()])
+
+        self.df['start_date_year'] = self.df['Start Date'].dt.year
 
     def __process_date(self):
         self.df[self.MY_DATE_COLUMN] = self.df[self.MY_DATE_COLUMN].astype(str)
@@ -151,11 +157,12 @@ class WikiTable:
 
     def __process_my_columns(self):
         # check if the date is a range column
-        # process date column
         if self.__check_is_it_a_range():
             self.__is_range = True
+            # process date column
             self.__process_date_range()
         else:
+            # process date column
             self.__process_date()
 
         print(chalk.blue('Date column has been processed successfully'))
@@ -190,6 +197,9 @@ class WikiTable:
                 column_name = str(input(
                     f'Please enter the column for {optional_column}.{suggested_string}\n'))
                 if column_name:
+                    if optional_column == 'magnitude':
+                        self.__magnitude_key = column_name
+
                     self.df[optional_column] = self.df[column_name]
                 break
 

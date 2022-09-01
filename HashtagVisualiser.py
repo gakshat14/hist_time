@@ -1,16 +1,19 @@
+import calendar
+import json
 import re
+import string
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import string
 import seaborn as sns
-from textblob import TextBlob
-from yachalk import chalk
 from scipy.signal import find_peaks
-import calendar
+from yachalk import chalk
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-from Timeline import TimelineVisualiser
 from Constants import ALL_COLORS
+from Timeline import TimelineVisualiser
+
 
 class HashtagVisualiser():
     def __init__(self, path_to_csv: str, tweet_key: str, date_time_key: str):
@@ -21,13 +24,22 @@ class HashtagVisualiser():
         self.__hashtag_index = None
         self.__hashtag_color_mapping = {}
         self.__all_colors = ALL_COLORS
+        self.__analyzer = SentimentIntensityAnalyzer()
         self.process_my_df()
+        self.__chars = self.get_my_chars()
 
     def print_my_dataframe(self):
         print('print dataframe called')
         # if not self.df:
         #     raise ValueError('The specified dataframe does not exists')
         print(self.df)
+
+    def get_my_chars(self):
+        with open('notebooks/glyphs.json') as f:
+            data = json.load(f)
+
+        data = dict(data)
+        return list(data.values())
 
     @staticmethod
     def __return_my_hashtag(series):
@@ -45,20 +57,17 @@ class HashtagVisualiser():
         self.df = self.df.explode('hashtags')
 
     def color_my_hashcode(self, hashtag, count):
-        color = ''
+        if len(self.__chars) == 0 and hashtag not in self.__hashtag_color_mapping:
+            return f"{f'{hashtag}({count})'}"
         if hashtag not in self.__hashtag_color_mapping:
-            color = self.__all_colors[0]
-            self.__hashtag_color_mapping[hashtag] = color
-            del self.__all_colors[0]
-            print(color)
-            print(chalk.hex(color)(f'{hashtag}({count})'))
-            return f"""{chalk.hex(color)(f'{hashtag}({count})')}"""
+            character = self.__chars[0]
+            self.__hashtag_color_mapping[hashtag] = character
+            del self.__chars[0]
+            return f"{f'{hashtag}({count})[{character}]'}"
         else:
-            print(chalk.hex(self.__hashtag_color_mapping[hashtag])(f'{hashtag}({count})'))
-            return f"""{chalk.hex(self.__hashtag_color_mapping[hashtag])(f'{hashtag}({count})')}"""
+            return f'{hashtag}({count})[{self.__hashtag_color_mapping[hashtag]}]'
 
-    @staticmethod
-    def __generate_sentiments(tweet):
+    def process_tweets_and_get_sentiment(self, tweet):
         # remove all the RT
         tweet = re.sub(r'^RT[\s]+', '', tweet)
         # remove hash signs
@@ -71,12 +80,12 @@ class HashtagVisualiser():
         tweet = re.sub(r'[' + string.punctuation + ']+', ' ', tweet)
 
         # finally get the sentiment score
-        blob = TextBlob(tweet)
-        return round(blob.sentiment.polarity, 2)
+        sentiment_score = self.__analyzer.polarity_scores(tweet)
+        return round(sentiment_score['compound'], 2)
 
     def __get_sentiments(self):
         print(chalk.blue('Generating sentiment'))
-        self.df['sentiment'] = self.df[self.__tweets_key].apply(self.__generate_sentiments)
+        self.df['sentiment'] = self.df[self.__tweets_key].apply(self.process_tweets_and_get_sentiment)
 
     def process_my_df(self):
         self.df[self.__date_time_key] = pd.to_datetime(self.df[self.__date_time_key])
@@ -86,7 +95,8 @@ class HashtagVisualiser():
         self.__get_sentiments()
         self.df['year'] = self.df[self.__date_time_key].dt.year
         self.df['month_year'] = self.df[self.__date_time_key].dt.to_period('M')
-        self.df['date_only'] = self.df[self.__date_time_key].dt.date
+        self.df['date_only'] = self.df[self.__date_time_key].dt.day
+        self.df['month'] = self.df[self.__date_time_key].dt.month
         self.__hashtag_index = self.__generate_hashtag_index()
         self.df.drop(columns=self.__tweets_key, inplace=True)
 
@@ -141,13 +151,12 @@ class HashtagVisualiser():
         df_grouped.columns = ['count_value']
         year_event = {'year': [], 'event': []}
         for year in sorted(unique_year):
-            print(year)
             temp_df = df_grouped.loc[year]
-            events = [f'{key}({value.count_value})' for key, value in
+            events = [self.color_my_hashcode(key, value.count_value) for key, value in
                       temp_df[temp_df['count_value'] > year_quantile[year]][:10].iterrows()]
             if len(events) > 0:
                 year_event['year'].append(year)
-                year_event['event'].append(events)
+                year_event['event'].append(', '.join(events))
 
         df_final = pd.DataFrame.from_dict(year_event)
         TimelineVisualiser(df_final, 'Usage of prominent hashtag over the years').create_my_timeline()
@@ -170,7 +179,7 @@ class HashtagVisualiser():
         for value in sorted(unique_values):
             print(value)
             temp_df = df_grouped.loc[value]
-            events = [f'{key}({value.count_value})' for key, value in
+            events = [f'{self.color_my_hashcode(key, value.count_value)}' for key, value in
                       temp_df[temp_df['count_value'] > value_quantile[value]][:10].iterrows()]
             if len(events) > 0:
                 value_event['month'].append(value)
@@ -178,6 +187,30 @@ class HashtagVisualiser():
         df_final = pd.DataFrame.from_dict(value_event)
         TimelineVisualiser(df_final, f'Usage of prominent hashtag over {calendar.month_name[month]}',
                            timeline_key='month').create_my_timeline()
+
+    def generate_quantile_specific_year_month(self, month=5, year=2016):
+        print('generating grouped hashtags')
+        temp_df = self.df.copy()
+        temp_df = temp_df[temp_df.year == year]
+        temp_df = temp_df[temp_df['month'] == month]
+        df_grouped = temp_df.loc[:, ['date_only', 'hashtags']].groupby(by='date_only').value_counts().to_frame()
+        unique_values = temp_df.date_only.unique().tolist()
+        value_quantile = {}
+        for value_date in unique_values:
+            value_quantile[value_date] = np.quantile(df_grouped.loc[value_date].values, 0.99)
+        df_grouped.columns = ['count_value']
+        value_event = {'days': [], 'event': []}
+        for value in sorted(unique_values):
+            temp_df = df_grouped.loc[value]
+            events = [f'{self.color_my_hashcode(key, value.count_value)}' for key, value in
+                      temp_df[temp_df['count_value'] > value_quantile[value]][:10].iterrows()]
+            if len(events) > 0:
+                value_event['days'].append(value)
+                value_event['event'].append(', '.join(events))
+        df_final = pd.DataFrame.from_dict(value_event)
+        TimelineVisualiser(df_final,
+                           f'Usage of prominent hashtag over the month {calendar.month_name[month]} of year {year}',
+                           timeline_key='days', x_label='Days').create_my_timeline()
 
     def generate_quantile_specific_year(self, year=2015):
         print(year)
@@ -197,7 +230,7 @@ class HashtagVisualiser():
         for value in sorted(unique_values):
             print(value)
             temp_df = df_grouped.loc[value]
-            events = [f'{key}({value.count_value})' for key, value in
+            events = [self.color_my_hashcode(key, value.count_value) for key, value in
                       temp_df[temp_df['count_value'] > value_quantile[value]][:10].iterrows()]
             if len(events) > 0:
                 value_event['month'].append(value)
@@ -218,9 +251,9 @@ class HashtagVisualiser():
             if len(peaks[0]) > 0:
                 for key, value in temp_df.iloc[list(peaks[0])].iterrows():
                     if key not in final_time_series_dict:
-                        final_time_series_dict[key] = [f'{hash}({value.value_count})']
+                        final_time_series_dict[key] = [self.color_my_hashcode(hash, value.value_count)]
                     else:
-                        final_time_series_dict[key].append(f'{hash}({value.value_count})')
+                        final_time_series_dict[key].append(self.color_my_hashcode(hash, value.value_count))
 
         final_df_dict = {'year': [], 'event': []}
         for key, items in final_time_series_dict.items():
@@ -230,6 +263,7 @@ class HashtagVisualiser():
                        reverse=True)[:10]))
 
         df_time_series = pd.DataFrame.from_dict(final_df_dict)
+        df_time_series = df_time_series.sort_values(by='year')
         TimelineVisualiser(df_time_series, 'Anything time series').create_my_timeline()
 
     def generate_peak_based_timeline_specific_month(self, month):
@@ -246,9 +280,9 @@ class HashtagVisualiser():
             if len(peaks[0]) > 0:
                 for key, value in temp_df.iloc[list(peaks[0])].iterrows():
                     if key not in final_time_series_dict:
-                        final_time_series_dict[key] = [f'{hash}({value.value_count})']
+                        final_time_series_dict[key] = [self.color_my_hashcode(hash, value.value_count)]
                     else:
-                        final_time_series_dict[key].append(f'{hash}({value.value_count})')
+                        final_time_series_dict[key].append(self.color_my_hashcode(hash, value.value_count))
 
         final_df_dict = {'month': [], 'event': []}
         for key, items in final_time_series_dict.items():
@@ -258,7 +292,39 @@ class HashtagVisualiser():
                        reverse=True)[:10]))
 
         df_time_series = pd.DataFrame.from_dict(final_df_dict)
-        TimelineVisualiser(df_time_series, f'Peaks of hashtags over the month {month}', 'month').create_my_timeline()
+        df_time_series = df_time_series.sort_values(by='month')
+        TimelineVisualiser(df_time_series, f'Peaks of hashtags over the month {month}', timeline_key='month',
+                           x_label='Months').create_my_timeline()
+
+    def generate_peak_based_timeline_specific_month_year(self, month, year):
+        temp_df = self.df.copy()
+        temp_df = temp_df[temp_df.year == year]
+        temp_df = temp_df[temp_df['month'] == month]
+        df_grouped_2 = temp_df.loc[:, ['date_only', 'hashtags']].groupby(by=['hashtags', 'date_only']).value_counts().to_frame()
+        df_grouped_2.columns = ['value_count']
+        all_hashtags = temp_df.hashtags.unique().tolist()
+        final_time_series_dict = {}
+        for hash in all_hashtags:
+            temp_df = df_grouped_2.loc[hash]
+            peaks = find_peaks(temp_df.value_count)
+            if len(peaks[0]) > 0:
+                for key, value in temp_df.iloc[list(peaks[0])].iterrows():
+                    if key not in final_time_series_dict:
+                        final_time_series_dict[key] = [self.color_my_hashcode(hash, value.value_count)]
+                    else:
+                        final_time_series_dict[key].append(self.color_my_hashcode(hash, value.value_count))
+
+        final_df_dict = {'date': [], 'event': []}
+        for key, items in final_time_series_dict.items():
+            final_df_dict['date'].append(key)
+            final_df_dict['event'].append(', '.join(
+                sorted(items, key=lambda item: int(re.findall(r'[0-9]+', re.findall(r'\([0-9]+\)', item)[0])[0]),
+                       reverse=True)[:10]))
+        df_time_series = pd.DataFrame.from_dict(final_df_dict)
+        df_time_series = df_time_series.sort_values(by='date')
+        TimelineVisualiser(df_time_series,
+                           f'Peaks of hashtags over the month {calendar.month_name[month]} of the year {year}',
+                           timeline_key='date', x_label='Days').create_my_timeline()
 
     def generate_peak_based_timeline_specific_year(self, year=2015):
         temp_df = self.df.copy()
@@ -274,10 +340,9 @@ class HashtagVisualiser():
             if len(peaks[0]) > 0:
                 for key, value in temp_df.iloc[list(peaks[0])].iterrows():
                     if key not in final_time_series_dict:
-                        final_time_series_dict[key] = [f'{hash}({value.value_count})']
+                        final_time_series_dict[key] = [self.color_my_hashcode(hash, value.value_count)]
                     else:
-                        final_time_series_dict[key].append(f'{hash}({value.value_count})')
-        print()
+                        final_time_series_dict[key].append(self.color_my_hashcode(hash, value.value_count))
         final_df_dict = {'month': [], 'event': []}
         for key in sorted(final_time_series_dict.keys()):
             items = final_time_series_dict[key]
@@ -287,27 +352,44 @@ class HashtagVisualiser():
                        reverse=True)[:10]))
 
         df_time_series = pd.DataFrame.from_dict(final_df_dict)
-        TimelineVisualiser(df_time_series, f'Peaks of hashtags over the year {year}', 'month').create_my_timeline()
+        df_time_series = df_time_series.sort_values(by='month')
+        TimelineVisualiser(df_time_series, f'Peaks of hashtags over the year {year}',
+                           timeline_key='month').create_my_timeline()
 
-    def generate_time_series_hashtag(self, hashtag_to_plot: str):
+    def generate_time_series_hashtag(self, hashtag_to_plot: str, year=None):
         fig, ax = plt.subplots(figsize=(15, 8))
         new_df = self.df.copy()
         new_df = new_df[new_df['hashtags'] == hashtag_to_plot]
-        temp = new_df.groupby('year').count().reset_index().iloc[:, [0, 1]]
+        if year:
+            new_df = new_df[new_df.year == year]
+            temp = new_df.groupby('month').count().reset_index().iloc[:, [0, 1]]
+            ax.set_xlabel('Months')
+            ax.set_title(f'Usage of {hashtag_to_plot} over {year}')
+            ax.set_xticks(temp.iloc[:, 0])
+            ax.set_xticklabels([calendar.month_name[a] for a in temp.iloc[:, 0]])
+        else:
+            temp = new_df.groupby('year').count().reset_index().iloc[:, [0, 1]]
+            ax.set_xlabel('Years')
+            ax.set_title(f'Usage of {hashtag_to_plot} over the years')
+            ax.set_xticks(temp.iloc[:, 0])
+
         plt.plot(temp.iloc[:, 0], temp.iloc[:, 1])
-        ax.set_xticks(temp.iloc[:, 0])
-        ax.set_xlabel('Year')
         ax.set_ylabel('Count')
-        ax.set_title(f'Usage of {hashtag_to_plot} over the years')
         plt.show()
 
     def get_sentiment_score(self):
         pass
 
+
 if __name__ == '__main__':
     tw = HashtagVisualiser('data/tweets.csv', 'content', 'date_time')
-    tw.generate_time_series_hashtag('#FallonTonight')
+    # tw.generate_time_series_hashtag('#FallonTonight', year=2016)
     # tw.generate_quantile_specific_year(2015)
+    tw.generate_quantile_all()
+    # tw.generate_quantile_specific_month(11)
     # tw.generate_peak_based_timeline_all()
     # tw.generate_peak_based_timeline_specific_month(5)
-    # tw.generate_peak_based_timeline_specific_year()
+    # tw.generate_peak_based_timeline_specific_year(2017)
+    # tw.generate_sentiment_time_series('#FallonTonight')
+    # tw.generate_quantile_specific_year_month(5, 2015)
+    # tw.generate_peak_based_timeline_specific_month_year(5, 2015)
