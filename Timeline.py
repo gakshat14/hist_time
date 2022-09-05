@@ -73,7 +73,7 @@ class TimelineVisualiser:
 
         for index in range(0, len(x_axis)):
             text = f'{self.__short_my_string(event[index])} \n'
-            if len(location):
+            if len(location) > 0:
                 text += f'({self.__short_my_string(location[index])}) \n'
             if len(magnitude) > 0:
                 text += f'({self.__short_my_string(magnitude_text[index])}) \n'

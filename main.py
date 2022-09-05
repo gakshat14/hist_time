@@ -21,7 +21,7 @@ parser.add_argument('-m', '--month', type=int,
 parser.add_argument('-y', '--year', type=int,
                     help='Year in numeric for a specific year to process. Only the month of that year is processed '
                          'when paired with -m or --month.')
-parser.add_argument('-l', '--list', type=str, help='Can be used to print all of the hashtags found')
+parser.add_argument('-l', '--list', type=bool, help='Can be used to print all of the hashtags found')
 parser.add_argument('-q', '--quantile', type=bool,
                     help='Used for generating usage of hashtags over the specified month or year. 99th quantile will '
                          'be calculated.')
@@ -35,13 +35,16 @@ parser.add_argument('-s', '--sentiment', type=str, help='Used for generating tim
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    print(args)
     if args.application_to_run == 'wiki':
         wt = WikiTable(args.url, args.heading)
         # next thing to do
     else:
+        if not args.quantile and not args.time_series and not args.list and not args.sentiment:
+            print(chalk.red_bright('When visualising hashtags, please specify type of statistical analysis required. '
+                                   'User -q for quantiles or -t for time series.'))
+            exit(-1)
+
         tw = HashtagVisualiser(args.tweet_file, 'content', 'date_time')
-        print(args.year)
         year = args.year
         month = args.month
         notValidYear = type(year) == int and year < 1000
@@ -53,6 +56,9 @@ if __name__ == '__main__':
         #     if notValidMonth:
         #         print(chalk.red_bright('When visualising hashtags, year or month is required.'))
         #         exit(-1)
+
+        if args.list:
+            print(', '.join(tw.df.hashtags.unique()))
 
         if args.quantile:
             if year and not month:

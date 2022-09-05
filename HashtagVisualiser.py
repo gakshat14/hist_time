@@ -78,7 +78,6 @@ class HashtagVisualiser():
         tweet = re.sub(r'https?:\/\/.*[\r\n]*', '', tweet)
         # remove punctuation
         tweet = re.sub(r'[' + string.punctuation + ']+', ' ', tweet)
-
         # finally get the sentiment score
         sentiment_score = self.__analyzer.polarity_scores(tweet)
         return round(sentiment_score['compound'], 2)
@@ -90,9 +89,9 @@ class HashtagVisualiser():
     def process_my_df(self):
         self.df[self.__date_time_key] = pd.to_datetime(self.df[self.__date_time_key])
         self.df = self.df.drop(columns=self.df.columns.difference([self.__tweets_key, self.__date_time_key]))
-        print(chalk.blue('Processing date to generate year, month and date'))
         self.__generate_hashtags()
         self.__get_sentiments()
+        print(chalk.blue('Processing date to generate year, month and date'))
         self.df['year'] = self.df[self.__date_time_key].dt.year
         self.df['month_year'] = self.df[self.__date_time_key].dt.to_period('M')
         self.df['date_only'] = self.df[self.__date_time_key].dt.day
@@ -254,14 +253,12 @@ class HashtagVisualiser():
                         final_time_series_dict[key] = [self.color_my_hashcode(hash, value.value_count)]
                     else:
                         final_time_series_dict[key].append(self.color_my_hashcode(hash, value.value_count))
-
         final_df_dict = {'year': [], 'event': []}
         for key, items in final_time_series_dict.items():
             final_df_dict['year'].append(key)
             final_df_dict['event'].append(', '.join(
                 sorted(items, key=lambda item: int(re.findall(r'[0-9]+', re.findall(r'\([0-9]+\)', item)[0])[0]),
                        reverse=True)[:10]))
-
         df_time_series = pd.DataFrame.from_dict(final_df_dict)
         df_time_series = df_time_series.sort_values(by='year')
         TimelineVisualiser(df_time_series, 'Anything time series').create_my_timeline()

@@ -40,7 +40,9 @@ class WikiTable:
         caption = tag.select('caption')
 
         if len(caption) >= 1:
+            # get the text present inside the caption tag
             text = caption[0].getText()
+            # if we have found a match return it
             if len(re.findall(self.__regex, text)) >= 1:
                 return True
 
@@ -53,6 +55,8 @@ class WikiTable:
             else:
                 return self.is_this_my_table(tag, 'h3')
         elif tag_to_search_for != 'h3':
+            # since we haven't found anything in caption and h2 tag
+            # search for the text in h3 tag
             return self.is_this_my_table(tag, 'h3')
         return False
 
@@ -78,7 +82,7 @@ class WikiTable:
             self.save_as_csv()
             # finally process the columns
             self.__process_my_columns()
-            self.save_as_csv()
+            self.save_as_csv(is_processed=True)
             if self.__is_range:
                 TimelineVisualiser(self.df, self.table_title, 'Years', 'start_date_year',
                                    magnitude_legend_key=self.__magnitude_key, is_range=True,
@@ -152,8 +156,9 @@ class WikiTable:
 
         print(chalk.blue('Magnitude column processed successfully.'))
 
-    def save_as_csv(self):
-        self.df.to_csv(f'{self.__file_name}.csv', index=False)
+    def save_as_csv(self, is_processed=False):
+        filename = f'{self.__file_name}.csv' if not is_processed else f'{self.__file_name}_processed.csv'
+        self.df.to_csv(filename, index=False)
 
     def __process_my_columns(self):
         # check if the date is a range column
@@ -185,7 +190,6 @@ class WikiTable:
                     f'Please enter the column for {column_string}.{suggested_string}\n'))
                 if column_name:
                     self.df[required_column] = self.df[column_name]
-                    print(self.df.columns)
                     break
 
         print(chalk.blue(
