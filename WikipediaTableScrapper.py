@@ -22,7 +22,7 @@ class WikiTable:
         self.url = url
         self.__only_char_regex = r'[a-zA-Z]+'
         self.__square_brackets_regex = r'\[.*?\]'
-        self.__numeric_regex = r'\d+\.\d+'
+        self.__numeric_regex = r'\d+.\d+'
         self.__magnitude_key = ''
         self.table_title = ' '.join(re.findall(self.__only_char_regex, table_title, flags=re.IGNORECASE))
         self.__file_name = '_'.join(self.table_title.split(" "))
@@ -138,21 +138,28 @@ class WikiTable:
 
         if len(df_null_dates) > 0:
             self.print_delete_message_date(df_null_dates)
-            self.df = self.df.drop(df_null_dates)
+            self.df = self.df.drop([index for index, value in df_null_dates.iterrows()])
         self.df['year'] = self.df[self.MY_DATE_COLUMN].dt.year
 
     def __process_magnitude(self):
-        print(self.df.columns)
+        def remove_comma(string_values: List[str]):
+            return [string_value.replace(',', '') for string_value in string_values]
         # first convert it into string
         self.df[self.MY_MAGNITUDE_COLUMN] = self.df[self.MY_MAGNITUDE_COLUMN].astype(str)
 
         # now extract all the numbers
         magnitude_values = self.df[self.MY_MAGNITUDE_COLUMN].tolist()
-        only_numeric = [re.findall(self.__numeric_regex, value) for value in magnitude_values]
-        # sum if we have 2 values together
-        cleaned_magnitude_value = [np.mean(list((map(float, value)))) for value in only_numeric]
+        only_numeric = [re.findall(self.__numeric_regex, value, flags=re.MULTILINE) for value in magnitude_values]
+        # avg if we have 2 values together
+        cleaned_magnitude_value = [np.mean(list((map(float, remove_comma(value))))) for value in only_numeric]
 
         self.df['magnitude_calc'] = cleaned_magnitude_value
+
+        # find the NaNs
+        df_null_mag = self.df[pd.isnull(self.df['magnitude_calc'])]
+        if len(df_null_mag) > 0:
+            self.print_delete_message_date(df_null_mag)
+            self.df = self.df.drop([index for index, value in df_null_mag.iterrows()])
 
         print(chalk.blue('Magnitude column processed successfully.'))
 
@@ -173,7 +180,7 @@ class WikiTable:
         print(chalk.blue('Date column has been processed successfully'))
         print(self.df.columns)
         # clean magnitude column and remove any textual data
-        not self.df[self.MY_MAGNITUDE_COLUMN].empty and self.__process_magnitude()
+        self.MY_MAGNITUDE_COLUMN in self.df.columns and self.__process_magnitude()
 
     def __get_column_mapping(self):
         columns_to_filter = []
@@ -220,6 +227,6 @@ class WikiTable:
 
 
 if __name__ == '__main__':
-    url = "https://en.wikipedia.org/wiki/List_of_recessions_in_the_United_States"
-    heading_title = 'Free Banking Era to the Great Depression'
+    url = "https://en.wikipedia.org/wiki/List_of_tornadoes_and_tornado_outbreaks_in_Asia"
+    heading_title = 'Bangladesh'
     wt = WikiTable(url, heading_title)

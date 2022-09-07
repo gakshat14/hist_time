@@ -351,7 +351,7 @@ class HashtagVisualiser():
         df_time_series = pd.DataFrame.from_dict(final_df_dict)
         df_time_series = df_time_series.sort_values(by='month')
         TimelineVisualiser(df_time_series, f'Peaks of hashtags over the year {year}',
-                           timeline_key='month').create_my_timeline()
+                           timeline_key='month', x_label='Months').create_my_timeline()
 
     def generate_time_series_hashtag(self, hashtag_to_plot: str, year=None):
         fig, ax = plt.subplots(figsize=(15, 8))

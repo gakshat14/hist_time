@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import calendar
 
 
 class TimelineVisualiser:
@@ -51,8 +52,7 @@ class TimelineVisualiser:
         ax.set_title(self.heading, pad=20)
 
         # create vertical lines
-        levels = np.tile([1, -1, 2, -2],
-                         int(np.ceil(length_df / 4)))[:length_df]
+        levels = np.tile([1, -1, 2, -2], int(np.ceil(length_df / 4)))[:length_df]
 
         # defining x_axis
         x_axis = [x * 2 for x in range(0, length_df)]
@@ -67,9 +67,19 @@ class TimelineVisualiser:
         ax.plot(x_axis, y_axis, color="k", label='Baseline')
 
         if len(magnitude) > 0:
-            multiplier = 1.7 if max(magnitude) > 10 else 2.7
+            multiplier = 2.7
+            max_mag = max(magnitude)
+            if max_mag >= 20:
+                multiplier = 1.7
+            if max_mag >= 100:
+                multiplier = 0.9
+            if max_mag >= 1000:
+                multiplier = 0.7
+
+            # multiplier = 1.7 if max(magnitude) > 10 else 2.7
             marker_size = np.array([n ** multiplier for n in magnitude], dtype=int)
-            ax.scatter(x_axis, y_axis, s=marker_size, edgecolors='k', c='lightgray', label=self.magnitude_label)
+            ax.scatter(x_axis, y_axis, s=marker_size,
+                       edgecolors='k', c='lightgray', label=self.magnitude_label)
 
         for index in range(0, len(x_axis)):
             text = f'{self.__short_my_string(event[index])} \n'
@@ -87,7 +97,11 @@ class TimelineVisualiser:
             #             verticalalignment="bottom" if levels[index] > 0 else "top", wrap=True, fontsize=11)
 
         ax.set_xticks(x_axis)
-        ax.set_xticklabels(date)
+        if self.x_label == 'Months':
+            ax.set_xticklabels([calendar.month_name[a] for a in date])
+        else:
+            ax.set_xticklabels(date)
+
         ax.set_xlabel(self.x_label)
         plt.setp(ax.get_xticklabels(), rotation=90, ha="center")
         # ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
@@ -96,7 +110,7 @@ class TimelineVisualiser:
         ax.spines[["left", "top", "right"]].set_visible(False)
         plt.margins(y=0.2)
         plt.subplots_adjust(bottom=0.12)
-        plt.legend(bbox_to_anchor=(1.001, 0.5), loc='center right', borderaxespad=0)
+        plt.legend(loc='upper left', fontsize='x-small', prop={'size': 12})
         self.attribution_text and fig.text(0.50, 0.02, self.attribution_text, horizontalalignment='center', wrap=True)
         # plt.legend(loc='center right')
         plt.savefig(self.heading, bbox_inches='tight', dpi=200)
