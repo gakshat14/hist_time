@@ -132,11 +132,14 @@ class HashtagVisualiser():
     def generate_sentiment_time_series(self, hashtag_to_plot):
         # temp_df = self.df[self.df.hashtags == hashtag]
         fig, ax = plt.subplots(figsize=(15, 8))
-        sns.lineplot(data=self.df[self.df.hashtags == hashtag_to_plot], x=self.__date_time_key, y='sentiment', ax=ax, ci=False)
+        sns.lineplot(data=self.df[self.df.hashtags == hashtag_to_plot], x=self.__date_time_key, y='sentiment', ax=ax,
+                     ci=False)
         # ax.plot(temp_df[self.__date_time_key], np.zeros_like(temp_df[self.__date_time_key]))
         # ax.annotate('Neutral', xy=(1, 0.4), xytext=(1, 0.5))
         ax.set_xlabel('Date')
         ax.set_ylabel('Sentiment Score')
+        ax.set_title(f'Sentiment score for {hashtag_to_plot}')
+        plt.savefig(f'sentiment_{hashtag_to_plot}', bbox_inches='tight', dpi=200)
         plt.show()
 
     def generate_quantile_all(self):
