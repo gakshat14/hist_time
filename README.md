@@ -56,3 +56,14 @@ when passed.
 the tweets in which that hashtag was used. It accepts hashtags found in the dataset. The list of
 hashtags can be printed by passing the -l or –list option.
 
+### Sample commands
+
+for hashtag analysis
+
+``python main.py tweet -f '.\data\tweets.csv'  -y 2016 -t True``
+
+For visualising historical events
+
+``python main.py wiki -U "https://en.wikipedia.org/wiki/List_of_recessions_in_the_United_States" -H "Free Banking Era to the Great Depression (1836-1929)"``
+
+More **samples** can be found in `generated_timeline` folder.
